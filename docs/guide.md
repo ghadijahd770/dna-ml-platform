@@ -54,7 +54,7 @@ This is what "governance" means in practice.
 
 A template is a recipe file that builds boxes 3 to 6 with all the right settings in one command. The request menu is a simple list: "if DNA asks for X, run template Y." That is how we're ready before anyone asks.
 
-Our repo already has a starter: `cicd/infra/main.bicep`.
+Ready-made in the `dna-ml-platform` repo, written in Terraform.
 
 ## The step-by-step guide
 
@@ -335,7 +335,7 @@ It tags new and changed resources straight away. For resources that already exis
 **Why:** Fabric is already running, but its ML features and permissions need to be locked to the right groups.
 
 1.  **Tenant settings** (Fabric admin portal → Tenant settings): find the machine learning / Data Science settings and the Azure AI or Copilot settings. Enable them *for specific security groups only* (the DNA groups), not the whole organisation.
-2.  **Workspace roles**: in each DNA workspace, *Manage access* → add the groups with the Fabric roles from Step 2.
+2.  **Workspace roles**: ready-made in Terraform. `infra/fabric` in the `dna-ml-platform` repo gives each group its Fabric role from Step 2, and gives Azure ML access to OneLake. Run `scripts/deploy-fabric.sh` as a workspace Admin.
 3.  **Git integration**: Workspace settings → Git integration → connect to your repo. Now every notebook change is saved and traceable.
 4.  **Environments**: create a Fabric Environment with the Python libraries the team uses, so everyone gets the same versions.
 5.  **Sensitivity labels**: with the Purview / compliance team, make sure labels like "Confidential – Health" can be applied to lakehouses and reports.
@@ -350,60 +350,52 @@ It tags new and changed resources straight away. For resources that already exis
 
 **Why:** the template is a recipe file. Run it once and you get a complete, correctly secured ML workspace. Run it again for dev, test and prod and they're identical.
 
-**Ready-made:** the `dna-ml-platform` repo has this template already, in `infra/modules/ml.bicep`, deployed by `scripts/deploy-sandbox.sh`. It does the following:
+**Ready-made:** the `dna-ml-platform` repo has this template already, written in **Terraform**, in `infra/azure/ml.tf` and `infra/azure/roles.tf`. It does the following:
 
-| Add to the template                                                             | So that…                                                               |
-|---------------------------------------------------------------------------------|------------------------------------------------------------------------|
-| A container registry (ACR) linked to the workspace, admin account off           | Model containers have their own home, opened only with Entra           |
-| **Managed network** set to "Allow internet outbound"                            | Training computers are isolated by Microsoft, with no VNet work for us |
-| Public access **on**, local login **off** on compute, storage shared keys off   | Reachable from Fabric and laptops, but only with an Entra login        |
-| Role assignments for each group from Step 2 (group IDs passed in as parameters) | Permissions are right from minute one                                  |
-| Diagnostic settings sending logs to `law-dna-sbx-san-01`                        | Everything is logged in one place                                      |
-| A GPU and a CPU compute cluster with **minimum nodes = 0**                      | You only pay while training                                            |
-| Tags on everything                                                              | Cost reports know who owns what                                        |
+| In the template                                                        | So that…                                                               |
+|------------------------------------------------------------------------|------------------------------------------------------------------------|
+| A container registry (ACR) linked to the workspace, admin account off  | Model containers have their own home, opened only with Entra           |
+| **Managed network** set to "Allow internet outbound"                   | Training computers are isolated by Microsoft, with no VNet work for us |
+| Public access **on**, local login **off** on compute                   | Reachable from Fabric and laptops, but only with an Entra login        |
+| Role assignments for each group from Step 2                            | Permissions are right from minute one                                  |
+| Diagnostic settings sending logs to `law-dna-sbx-san-01`               | Everything is logged in one place                                      |
+| A CPU compute cluster with **minimum nodes = 0**, GPU cluster optional | You only pay while training                                            |
+| Tags on everything                                                     | Cost reports know who owns what                                        |
 
-The sandbox network settings are a few lines on the workspace in `main.bicep`:
+**What Terraform is:** you describe what you want in `.tf` files. Terraform shows you a **plan** of what it will change, and only after you agree does it **apply** it. It keeps a **state file**, its record of what it built, in a locked-down storage account.
 
-    resource mlWorkspace 'Microsoft.MachineLearningServices/workspaces@2024-04-01' = {
-      // ...existing name, location, identity, storage, keyVault, appInsights...
-      properties: {
-        publicNetworkAccess: 'Enabled'              // sandbox: public endpoint
-        managedNetwork: {
-          isolationMode: 'AllowInternetOutbound'    // Microsoft-managed network for compute
-        }
+The sandbox network settings are a few lines on the workspace in `infra/azure/ml.tf`:
+
+    resource "azurerm_machine_learning_workspace" "main" {
+      # ...name, location, storage, key vault, app insights, registry...
+      public_network_access_enabled = true   # sandbox: public endpoint
+
+      managed_network {
+        isolation_mode = "AllowInternetOutbound"   # Microsoft-managed network for compute
       }
     }
 
-    // on each compute cluster:  disableLocalAuth: true
-    // on the container registry: adminUserEnabled: false
+    # on each compute cluster:   local_auth_enabled = false
+    # on the container registry: admin_enabled      = false
 
 **Storage shared keys:** turning these off also needs the workspace to use identity-based access to its own storage. Check Microsoft's current "disable shared key" docs for Azure ML before switching it off, or the studio may stop showing files.
 
-A role assignment looks like this in Bicep. Every row of your Step 2 table becomes one of these blocks:
+A role assignment in Terraform uses the role's **name**, so there are no long IDs to look up. Every row of your Step 2 table becomes one entry like this in `infra/azure/roles.tf`:
 
-    param dataScientistsGroupId string   // object ID of sg-dna-data-scientists
-
-    resource dsRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-      name: guid(mlWorkspace.id, dataScientistsGroupId, 'AzureML Data Scientist')
-      scope: mlWorkspace
-      properties: {
-        principalId: dataScientistsGroupId
-        principalType: 'Group'
-        roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions',
-          'f6c7c914-8db3-469d-8ca1-694a8f32e121')   // AzureML Data Scientist
-      }
+    resource "azurerm_role_assignment" "data_scientists" {
+      scope                = azurerm_machine_learning_workspace.main.id
+      role_definition_name = "AzureML Data Scientist"
+      principal_id         = var.group_ids.data_scientists   # sg-dna-data-scientists
+      principal_type       = "Group"
     }
 
-Find any role's ID with: `az role definition list --name "AzureML Data Scientist" --query [].name -o tsv`
+Get a group's object ID with: `az ad group show --group sg-dna-data-scientists --query id -o tsv`. The script `scripts/get-group-ids.sh` does this for all six.
 
-Get a group's object ID with: `az ad group show --group sg-dna-data-scientists --query id -o tsv`
+Preview, then deploy:
 
-Run the template:
-
-    az deployment group create -g rg-dna-ml-sbx-san-01 \
-      --template-file cicd/infra/main.bicep \
-      --parameters mlWorkspaceName=mlw-dna-sbx-san-01 baseName=dnasbx \
-                   dataScientistsGroupId=$(az ad group show --group sg-dna-data-scientists --query id -o tsv)
+    scripts/bootstrap-state.sh          # once: storage for the Terraform state
+    scripts/deploy-sandbox.sh --plan    # preview only, nothing changes
+    scripts/deploy-sandbox.sh           # preview, then asks before applying
 
 **Quota:** GPUs need quota approval, which can take days. Request it now in *Subscriptions → Usage + quotas*, even if nobody needs GPUs yet.
 
@@ -415,7 +407,7 @@ Run the template:
 
 **Why:** when a GenAI use case appears, you want a safe Foundry project ready in under an hour, with costs capped and only approved models available.
 
-**Ready-made:** `infra/modules/foundry.bicep` in the `dna-ml-platform` repo. The Foundry template creates:
+**Ready-made:** `infra/azure/foundry.tf` in the `dna-ml-platform` repo. The Foundry template creates:
 
 - A **Foundry resource** (an "AI Services" account) with a **public endpoint** and **key access disabled**, so only Entra logins work. Optionally, add IP rules for the corporate network.
 - One **project** per use case or team. Projects keep work separate.
@@ -425,14 +417,16 @@ Run the template:
 
 <!-- -->
 
-    properties: {
-      publicNetworkAccess: 'Enabled'   // sandbox: public endpoint
-      disableLocalAuth: true           // no API keys, Entra login only
+    properties = {
+      publicNetworkAccess = "Enabled"   # sandbox: public endpoint
+      disableLocalAuth    = true        # no API keys, Entra login only
     }
+
+Approved models are listed in `infra/azure/sandbox.tfvars` under `foundry_model_deployments`. Nothing else can be deployed.
 
 Later, when apps start calling models, add the **AI gateway** (Azure API Management) in front. It gives one address for all models, limits per team and a log of who used what.
 
-**Moving target:** Microsoft renamed Azure AI Foundry to Microsoft Foundry and changed how projects work. Build from the current Microsoft "Foundry Bicep" quickstart, not from older blog posts, and check model availability for your region.
+**Moving target:** Microsoft renamed Azure AI Foundry to Microsoft Foundry and changed how projects work. The template uses the AzAPI Terraform provider for Foundry so new features work straight away. Check model availability for your region.
 
 **How you know it worked:** a GenAI developer can open the project in the Foundry portal and chat with the approved model; they can't deploy a different model.
 
@@ -556,8 +550,11 @@ A robot login that Azure creates and looks after for a resource. No password to 
 Resource group  
 A folder in Azure that holds related resources.
 
-Template (Bicep)  
-A file describing what to build in Azure. Run it and Azure builds it.
+Template (Terraform)  
+Files describing what to build in Azure and Fabric. Terraform shows a plan, then builds it when you agree.
+
+State file  
+Terraform's record of what it built. Kept in a locked-down storage account. Never edit it by hand.
 
 Azure Policy  
 Rules that check or block what people create in Azure.

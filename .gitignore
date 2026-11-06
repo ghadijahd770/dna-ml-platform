@@ -1,6 +1,14 @@
-# Compiled Bicep output
-infra/**/*.json
-!infra/**/bicepconfig.json
+# Terraform working files and local state (state lives in Azure storage)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
 
 # Local environment files and secrets
 .env

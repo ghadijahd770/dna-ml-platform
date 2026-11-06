@@ -11,24 +11,25 @@
 | IP restrictions | Optional | Where a service supports it, allow only the corporate network or VPN ranges. |
 | Data allowed | **Synthetic or masked only** | This condition is what makes public endpoints acceptable. |
 
-## How the templates apply it
+## How the Terraform applies it
 
 | Resource | Setting in `infra/` |
 |---|---|
-| Azure ML workspace | `publicNetworkAccess: 'Enabled'`, `managedNetwork.isolationMode: 'AllowInternetOutbound'` |
-| Azure ML compute clusters | `disableLocalAuth: true` |
-| Container registry | `adminUserEnabled: false` |
-| Foundry resource | `publicNetworkAccess: 'Enabled'`, `disableLocalAuth: true` (no API keys) |
-| Key Vaults | RBAC (Entra) access only |
+| Azure ML workspace (`infra/azure/ml.tf`) | `public_network_access_enabled = true`, `managed_network { isolation_mode = "AllowInternetOutbound" }` |
+| Azure ML compute clusters | `local_auth_enabled = false` |
+| Container registry | `admin_enabled = false` |
+| Foundry resource (`infra/azure/foundry.tf`) | `publicNetworkAccess = "Enabled"`, `disableLocalAuth = true` (no API keys) |
+| Key Vaults | `enable_rbac_authorization = true` (Entra access only) |
+| Terraform state storage | Shared keys off, Entra login only (`scripts/bootstrap-state.sh`) |
 | Azure ML storage | Shared keys **on** by default. See below. |
 
 ## Storage shared keys
 
-`disableStorageSharedKey` is `false` by default. Turning shared keys off also needs the Azure ML workspace to use identity-based access to its own storage, otherwise Azure ML studio can stop showing files. Before setting it to `true`, follow Microsoft's current "disable shared key access" guidance for Azure ML and test it with a data scientist account. The audit policy in `policies/` reports the storage account as non-compliant until then.
+`disable_storage_shared_key` is `false` by default. Turning shared keys off also needs the Azure ML workspace to use identity-based access to its own storage, otherwise Azure ML studio can stop showing files. Before setting it to `true`, follow Microsoft's current "disable shared key access" guidance for Azure ML and test it with a data scientist account. The audit policy in `policies/` reports the storage account as non-compliant until then.
 
 ## Foundry data residency
 
-A `GlobalStandard` model deployment may process prompts in any Azure region. `Standard` keeps processing in the resource's region. Agree the deployment type with security before adding models to `infra/sandbox.bicepparam`.
+A `GlobalStandard` model deployment may process prompts in any Azure region. `Standard` keeps processing in the resource's region. Agree the deployment type with security before adding models to `infra/azure/sandbox.tfvars`.
 
 ## When to switch to private networking
 
