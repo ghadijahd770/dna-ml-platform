@@ -1,0 +1,34 @@
+name: New Foundry project or new team
+description: Another Foundry project for a use case, or a whole new team on the platform.
+title: "[New] "
+labels: ["request", "new"]
+body:
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What do you need?
+      options:
+        - A new Foundry project for an existing team
+        - A new team (own Azure ML workspace, Foundry, budget)
+    validations:
+      required: true
+  - type: input
+    id: name
+    attributes:
+      label: Name
+      description: Short, lowercase, no spaces. Used in resource names.
+      placeholder: claims
+    validations:
+      required: true
+  - type: input
+    id: owner
+    attributes:
+      label: Owner and cost centre
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: What is it for?
+    validations:
+      required: true

@@ -1,0 +1,44 @@
+name: Add or remove a person
+description: Give someone access to the ML platform, change their role, or remove them.
+title: "[Access] "
+labels: ["request", "access"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Access comes from Entra group membership. The platform team adds or removes the person; their Azure and Fabric access follows automatically.
+  - type: input
+    id: person
+    attributes:
+      label: Person's email
+      placeholder: name.surname@company.com
+    validations:
+      required: true
+  - type: dropdown
+    id: action
+    attributes:
+      label: What do you need?
+      options:
+        - Add
+        - Remove
+        - Change role
+    validations:
+      required: true
+  - type: dropdown
+    id: group
+    attributes:
+      label: Role
+      options:
+        - Data engineer (sg-dna-data-engineers)
+        - Data scientist (sg-dna-data-scientists)
+        - ML engineer (sg-dna-ml-engineers)
+        - GenAI developer (sg-dna-genai-developers)
+        - Viewer (sg-dna-viewers)
+    validations:
+      required: true
+  - type: input
+    id: manager
+    attributes:
+      label: Approving manager
+    validations:
+      required: true

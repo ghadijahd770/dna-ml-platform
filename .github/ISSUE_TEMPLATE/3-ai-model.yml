@@ -1,0 +1,44 @@
+name: Use an AI model
+description: Ask for a model (e.g. GPT) to be approved and deployed in your Foundry resource.
+title: "[Model] "
+labels: ["request", "foundry", "needs-security"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Every model needs security sign-off. Only synthetic or masked data may be sent to models in the sandbox.
+  - type: input
+    id: team
+    attributes:
+      label: Team
+      placeholder: dna
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Model and version
+      placeholder: gpt-4o-mini 2024-07-18
+    validations:
+      required: true
+  - type: textarea
+    id: use
+    attributes:
+      label: What will you use it for, and with what data?
+    validations:
+      required: true
+  - type: input
+    id: volume
+    attributes:
+      label: Expected usage
+      description: Roughly how many requests per day, or tokens per minute.
+  - type: dropdown
+    id: residency
+    attributes:
+      label: Must the data stay in South Africa?
+      options:
+        - "Yes"
+        - "No"
+        - Not sure
+    validations:
+      required: true

@@ -1,0 +1,55 @@
+# Team: DNA
+#
+# This file is everything the DNA team has on the platform. Most menu requests are a
+# change to this file (see docs/request-menu.md). After editing: open a pull request,
+# let Validate pass, merge, then run the deploy workflow for "requests".
+#
+# The file name (dna) becomes part of every resource name, e.g. mlw-dna-sbx-san-01.
+
+owner: dna-team
+cost_centre: CHANGE-ME
+expires: "2027-02-28"     # review monthly; extend or delete when it passes
+monthly_budget: 500       # per resource group, billing currency
+
+# Entra group object IDs. bootstrap/get-group-ids.sh prints these lines for you.
+# Leave a value empty ("") if the group doesn't exist yet; it is skipped.
+groups:
+  data_engineers: ""      # sg-dna-data-engineers
+  data_scientists: ""     # sg-dna-data-scientists
+  ml_engineers: ""        # sg-dna-ml-engineers
+  genai_developers: ""    # sg-dna-genai-developers
+  viewers: ""             # sg-dna-viewers
+
+azure_ml:
+  enabled: true
+  cpu_cluster:
+    vm_size: Standard_DS3_v2
+    max_nodes: 2          # request: "we need more CPU nodes"
+  gpu_cluster:
+    enabled: false        # request: "we need GPUs" (needs GPU quota first)
+    vm_size: Standard_NC4as_T4_v3
+    max_nodes: 1
+  disable_storage_shared_key: false   # see docs/network-decision.md before changing
+
+foundry:
+  enabled: true
+  projects:               # request: "we need another Foundry project"
+    - name: main
+      description: DNA team main project
+  # Approved models only (security sign-off needed). "Standard" keeps processing in the
+  # region; "GlobalStandard" may process prompts in any Azure region.
+  # Example:
+  #   - name: gpt-4o-mini
+  #     model: gpt-4o-mini
+  #     version: "2024-07-18"
+  #     format: OpenAI
+  #     sku: Standard
+  #     capacity: 10        # thousands of tokens per minute
+  models: []
+
+fabric:
+  # The GUID after /groups/ in the Fabric workspace URL. Leave "" to skip Fabric.
+  workspace_id: ""
+  # Optional: override the default role for a group, e.g.
+  # roles:
+  #   genai_developers: Contributor

@@ -1,0 +1,26 @@
+name: Extend or remove a sandbox
+description: Your sandbox resources are about to expire, or you no longer need them.
+title: "[Expiry] "
+labels: ["request", "expiry"]
+body:
+  - type: input
+    id: team
+    attributes:
+      label: Team
+      placeholder: dna
+    validations:
+      required: true
+  - type: dropdown
+    id: action
+    attributes:
+      label: What do you need?
+      options:
+        - Extend
+        - Remove
+    validations:
+      required: true
+  - type: input
+    id: until
+    attributes:
+      label: New expiry date (if extending)
+      placeholder: "2027-05-31"
