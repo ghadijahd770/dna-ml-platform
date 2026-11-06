@@ -13,23 +13,23 @@
 
 ## How the Terraform applies it
 
-| Resource | Setting in `infra/` |
+| Resource | Setting in Terraform |
 |---|---|
-| Azure ML workspace (`infra/azure/ml.tf`) | `public_network_access_enabled = true`, `managed_network { isolation_mode = "AllowInternetOutbound" }` |
+| Azure ML workspace (`requests/modules/team-azure/ml.tf`) | `public_network_access_enabled = true`, `managed_network { isolation_mode = "AllowInternetOutbound" }` |
 | Azure ML compute clusters | `local_auth_enabled = false` |
 | Container registry | `admin_enabled = false` |
-| Foundry resource (`infra/azure/foundry.tf`) | `publicNetworkAccess = "Enabled"`, `disableLocalAuth = true` (no API keys) |
+| Foundry resource (`requests/modules/team-azure/foundry.tf`) | `publicNetworkAccess = "Enabled"`, `disableLocalAuth = true` (no API keys) |
 | Key Vaults | `enable_rbac_authorization = true` (Entra access only) |
-| Terraform state storage | Shared keys off, Entra login only (`scripts/bootstrap-state.sh`) |
+| Terraform state storage | Shared keys off, Entra login only (`bootstrap/bootstrap-state.sh`) |
 | Azure ML storage | Shared keys **on** by default. See below. |
 
 ## Storage shared keys
 
-`disable_storage_shared_key` is `false` by default. Turning shared keys off also needs the Azure ML workspace to use identity-based access to its own storage, otherwise Azure ML studio can stop showing files. Before setting it to `true`, follow Microsoft's current "disable shared key access" guidance for Azure ML and test it with a data scientist account. The audit policy in `policies/` reports the storage account as non-compliant until then.
+`azure_ml.disable_storage_shared_key` in the team file is `false` by default. Turning shared keys off also needs the Azure ML workspace to use identity-based access to its own storage, otherwise Azure ML studio can stop showing files. Before setting it to `true`, follow Microsoft's current "disable shared key access" guidance for Azure ML and test it with a data scientist account. The audit policy in `policies/` reports the storage account as non-compliant until then.
 
 ## Foundry data residency
 
-A `GlobalStandard` model deployment may process prompts in any Azure region. `Standard` keeps processing in the resource's region. Agree the deployment type with security before adding models to `infra/azure/sandbox.tfvars`.
+A `GlobalStandard` model deployment may process prompts in any Azure region. `Standard` keeps processing in the resource's region. Agree the deployment type with security before adding models under `foundry.models` in the team file (`requests/teams/<team>.yaml`).
 
 ## When to switch to private networking
 

@@ -1,21 +1,41 @@
 # Request menu
 
-When the DNA team asks for something, find it here and follow the line.
+When the DNA team asks for something, find it here and follow the line. They ask through **Issues → New issue**, which has a form for each kind of request.
+
 Day-to-day work (notebooks, training, using approved models) needs **no request**: their group roles already cover it.
 
-| When DNA asks… | We do… | Approval needed | Time |
+## Requests handled in `requests/teams/<team>.yaml`
+
+Change the line, open a pull request, merge, then run **Deploy → requests** (plan, then apply). See [requests/README.md](../requests/README.md).
+
+| When they ask… | Change in the team file | Approval | Time |
 |---|---|---|---|
-| "Add a new person" | Add them to the right `sg-dna-*` group (we're group owners). Their Azure and Fabric access follows automatically | Their manager | Minutes (or the agreed identity-team turnaround) |
-| "We want to try ML in Fabric" | Already enabled; point them to the workspace | None | Minutes |
-| "We want to train a custom model" | Already deployed: Azure ML workspace `mlw-dna-sbx-san-01` with `cpu-cluster` | None | Minutes |
-| "We need more CPU nodes" | Raise `cpu_cluster_max_nodes` in `infra/azure/sandbox.tfvars`, run the deploy workflow | Platform lead | Under an hour |
-| "We need GPUs" | Request GPU quota, then set `deploy_gpu_cluster = true` and run the deploy workflow | Platform lead + budget owner | Hours (days for quota) |
-| "We want to use GPT" | Add the approved model to `foundry_model_deployments`, run the deploy workflow | Security (data and residency check) | Under an hour |
-| "We want a model that isn't on the approved list" | Security review of the model, then add it to the list | Security | Days |
-| "An app needs the model live" | Azure ML managed online endpoint (containers handled by Azure ML) | Platform lead | Hours |
-| "We have our own Docker app" | Container Apps template (not built yet) + CI/CD to the registry | Platform lead + security | About a day |
-| "Our sandbox resource group is about to expire" | Update `expires` in `infra/azure/sandbox.tfvars`, run the deploy workflow | Platform lead | Minutes |
+| "We need more CPU nodes" | `azure_ml.cpu_cluster.max_nodes` | Platform lead | Under an hour |
+| "We need GPUs" | Request GPU quota first, then `azure_ml.gpu_cluster.enabled: true` | Platform lead + budget owner | Hours (days for quota) |
+| "We want to use GPT" (or another model) | Add an entry under `foundry.models` | Security (data and residency) | Under an hour after sign-off |
+| "We need another Foundry project" | Add an entry under `foundry.projects` | Platform lead | Under an hour |
+| "Our sandbox is about to expire" | `expires` | Platform lead | Minutes |
+| "We need a bigger budget" | `monthly_budget` | Budget owner | Minutes |
+| "Give group X a different Fabric role" | `fabric.roles`, then `scripts/deploy.sh fabric` | Platform lead | Minutes |
+| "A new team wants to join" | Copy `dna.yaml` to `<newteam>.yaml` and fill it in | Platform lead + budget owner | Hours (waiting on groups) |
+
+## Requests handled outside the repo
+
+| When they ask… | We do… | Approval | Time |
+|---|---|---|---|
+| "Add or remove a person" | Add or remove them in the right `sg-dna-*` group (we're group owners). Azure and Fabric access follow automatically. | Their manager | Minutes |
+| "We want a model that isn't approved" | Security review first, then it's a `foundry.models` change | Security | Days |
 | "We want real patient data in the sandbox" | **No.** Real data needs private networking: plan dev/prod instead | Security | Project |
 | "Put it in production" | Follow the [promotion checklist](promotion-checklist.md) | Change board / business owner | Agreed process |
 
-Every change to the platform goes through this repo: edit, open a pull request, let the **Validate** check pass, merge, then run **Deploy sandbox** (plan first, then apply). Fabric role changes: `scripts/deploy-fabric.sh`.
+## Not built yet
+
+| When they ask… | Status |
+|---|---|
+| "An app needs the model as a live API" (online endpoint) | Needs a template in `requests/modules/` |
+| "We have our own Docker app" (Container Apps) | Needs a template in `requests/modules/` |
+| "Our app needs to call GPT" (app identity access) | Needs a template in `requests/modules/` |
+
+## Platform changes (rare)
+
+Changes to the shared foundation (alert email, CI/CD access, shared budget) are made in `platform/sandbox.tfvars` and deployed with **Deploy → platform**. Only the platform team does this.

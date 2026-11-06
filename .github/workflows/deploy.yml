@@ -1,0 +1,66 @@
+# Plans or applies the platform or the team requests from GitHub, using the CI/CD managed
+# identity (OIDC, no secrets). Fabric workspace roles are applied by a workspace admin with
+# scripts/deploy.sh fabric.
+#
+# Before the first run (see bootstrap/README.md):
+#   1. Do the once-off steps in bootstrap/README.md, including the first platform deploy.
+#   2. Create a GitHub environment called "sandbox" (Settings > Environments) and add yourself
+#      as a required reviewer, so every run needs a click from you.
+#   3. Add these repository variables (Settings > Secrets and variables > Actions > Variables):
+#        AZURE_CLIENT_ID          ci_client_id output of the platform deploy
+#        AZURE_TENANT_ID          your Entra tenant ID
+#        AZURE_SUBSCRIPTION_ID    the sandbox subscription ID
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      part:
+        description: "What to deploy"
+        type: choice
+        options:
+          - requests
+          - platform
+        default: requests
+      plan_only:
+        description: "Plan only (preview). Untick to apply."
+        type: boolean
+        default: true
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-sandbox
+  cancel-in-progress: false
+
+jobs:
+  terraform:
+    name: ${{ inputs.plan_only && 'Plan' || 'Apply' }} ${{ inputs.part }}
+    runs-on: ubuntu-latest
+    environment: sandbox
+    defaults:
+      run:
+        working-directory: ${{ inputs.part == 'platform' && 'platform' || 'requests/azure' }}
+    env:
+      ARM_USE_OIDC: "true"
+      ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: Terraform init
+        run: terraform init -input=false -backend-config=backend.sandbox.hcl
+
+      - name: Terraform plan
+        run: terraform plan -input=false -var-file=sandbox.tfvars -out=deploy.tfplan
+
+      - name: Terraform apply
+        if: ${{ !inputs.plan_only }}
+        run: terraform apply -input=false deploy.tfplan

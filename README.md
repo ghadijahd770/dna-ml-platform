@@ -6,82 +6,72 @@ The machine learning platform for the DNA team: Microsoft Fabric for data, Azure
 
 ![Architecture](docs/images/diagram.png)
 
-## What gets built
+## The repo in three parts
 
-| Resource group | Contents | Lock | Expires |
-|---|---|---|---|
-| `rg-dna-shared-sbx-san-01` | Log Analytics, Key Vault, alert action group, access-change alert, CI/CD identity | Delete lock | No (permanent) |
-| `rg-dna-ml-sbx-san-01` | Azure ML workspace (managed network), storage, Key Vault, App Insights, container registry, CPU cluster (scales to 0), optional GPU cluster | – | Yes |
-| `rg-dna-ai-sbx-san-01` | Foundry resource (API keys off), project, approved model deployments | – | Yes |
-
-Plus: Azure and Fabric role assignments for the six Entra groups, a monthly budget with 50/80/100% alerts on each resource group, diagnostic logs to Log Analytics, and guardrail policies on the subscription.
-
-## Repository layout
+| Folder | What it is | When you touch it |
+|---|---|---|
+| [`bootstrap/`](bootstrap/) | **Once-off setup:** state storage, group IDs, guardrail policies, the identity-team request, and the step-by-step setup guide | Once, when setting up |
+| [`platform/`](platform/) | **The shared foundation:** logs, Key Vault, alert email, access-change alerts, CI/CD identity, delete lock, budget | Rarely. Platform team only. |
+| [`requests/`](requests/) | **Day-to-day:** one YAML file per team. Each team gets an Azure ML workspace, a Foundry resource with projects and approved models, budgets, and Azure and Fabric roles | Every menu request |
+| [`docs/`](docs/) | The beginner guide, request menu, permissions, network decision, promotion checklist | Reading and reference |
 
 ```text
 dna-ml-platform/
-├── docs/
-│   ├── DNA-ML-Platform-Guide.docx   ← full beginner guide (Word)
-│   ├── guide.md                     ← the same guide in Markdown
-│   ├── deployment-runbook.md        ← how to deploy this repo, step by step
-│   ├── permissions.md               ← who gets which role
-│   ├── network-decision.md          ← sandbox network choices and when to go private
-│   ├── request-menu.md              ← "if DNA asks for X, we do Y"
-│   ├── identity-team-request.md     ← email to request the Entra groups
-│   └── promotion-checklist.md       ← sandbox → production, plus the test run
-├── infra/
-│   ├── azure/                       ← Terraform: Azure resources and role assignments
-│   │   ├── main.tf, shared.tf, ml.tf, foundry.tf, budgets.tf, roles.tf, outputs.tf
-│   │   ├── sandbox.tfvars           ← sandbox settings: fill in CHANGE-ME values
-│   │   └── backend.sandbox.hcl      ← where the state file lives
-│   └── fabric/                      ← Terraform: Fabric workspace roles
-│       ├── main.tf, variables.tf, outputs.tf
-│       ├── sandbox.tfvars           ← the Fabric workspace ID
-│       └── backend.sandbox.hcl
-├── policies/
-│   ├── assign-policies.sh           ← assigns the guardrail policies
-│   └── README.md
+├── bootstrap/
+│   ├── README.md                    ← START HERE: once-off setup, step by step
+│   ├── bootstrap-state.sh           ← secure storage for the Terraform state
+│   ├── get-group-ids.sh             ← prints the Entra group IDs to paste
+│   ├── assign-policies.sh           ← guardrail policies (+ policies.md)
+│   └── identity-team-request.md     ← email to request the Entra groups
+├── platform/                        ← Terraform: shared foundation (+ sandbox.tfvars)
+├── requests/
+│   ├── README.md                    ← how to handle a request
+│   ├── teams/dna.yaml               ← everything the DNA team has
+│   ├── azure/                       ← Terraform: team files → Azure resources
+│   ├── fabric/                      ← Terraform: team files → Fabric workspace roles
+│   └── modules/team-azure/          ← what one team gets
 ├── scripts/
-│   ├── bootstrap-state.sh           ← one-time: secure storage for the Terraform state
-│   ├── deploy-sandbox.sh            ← plan + apply the Azure stack from your machine
-│   ├── deploy-fabric.sh             ← plan + apply the Fabric workspace roles
-│   ├── get-group-ids.sh             ← looks up the Entra group IDs
+│   ├── deploy.sh                    ← plan + apply: platform | requests | fabric
 │   ├── sandbox-cleanup-report.sh    ← monthly expiry check
 │   └── config.sh                    ← group names and region
-└── .github/workflows/
-    ├── validate.yml                 ← terraform fmt + validate and shellcheck on every push
-    └── deploy-sandbox.yml           ← plan or apply from GitHub (OIDC, approval required)
+├── docs/
+│   ├── DNA-ML-Platform-Guide.docx   ← full beginner guide (Word; guide.md is the same in Markdown)
+│   ├── request-menu.md              ← "if DNA asks for X, change Y"
+│   ├── permissions.md               ← who gets which role
+│   ├── network-decision.md          ← sandbox network choices and when to go private
+│   └── promotion-checklist.md       ← sandbox → production, plus the test run
+└── .github/
+    ├── ISSUE_TEMPLATE/              ← request forms for the DNA team
+    └── workflows/                   ← Validate (every push) and Deploy (plan/apply, approval required)
 ```
 
-## Quick start
+## Getting started
+
+Follow [bootstrap/README.md](bootstrap/README.md). In short:
+
+```bash
+az login
+az account set --subscription "<sandbox subscription>"
+bootstrap/bootstrap-state.sh
+bootstrap/get-group-ids.sh          # paste the IDs into the settings files
+scripts/deploy.sh platform --plan
+scripts/deploy.sh platform
+scripts/deploy.sh requests
+scripts/deploy.sh fabric
+bootstrap/assign-policies.sh
+```
 
 You need the Azure CLI, **Terraform 1.9+** and Bash.
 
-1. Request the Entra groups: [docs/identity-team-request.md](docs/identity-team-request.md)
-2. Create the Terraform state storage (once): `scripts/bootstrap-state.sh`
-3. Fill in `cost_centre` in `infra/azure/sandbox.tfvars` and `workspace_id` in `infra/fabric/sandbox.tfvars`
-4. Preview, then deploy:
+## Handling requests
 
-   ```bash
-   az login
-   az account set --subscription "<sandbox subscription>"
-   export DNA_ALERT_EMAIL="platform-team@yourcompany.com"
-   scripts/deploy-sandbox.sh --plan
-   scripts/deploy-sandbox.sh
-   scripts/deploy-fabric.sh
-   ```
-
-5. Assign the policies: `policies/assign-policies.sh`
-6. Finish the manual Fabric steps and the GitHub workflow setup: [docs/deployment-runbook.md](docs/deployment-runbook.md)
-
-## How changes work
-
-1. Edit on a branch and open a pull request.
-2. **Validate** checks the Terraform formatting, runs `terraform validate` on both stacks and checks the scripts.
-3. Merge, then run **Actions → Deploy sandbox** with *Plan only* ticked, read the plan, then run it again unticked. The `sandbox` environment asks for your approval before anything changes.
+1. The DNA team opens an issue with one of the request forms (**Issues → New issue**).
+2. You change their team file, `requests/teams/dna.yaml`. [docs/request-menu.md](docs/request-menu.md) says which line.
+3. Pull request, **Validate** passes, merge.
+4. **Actions → Deploy**, part `requests`: plan first, then apply. The `sandbox` environment asks for your approval.
 
 Never change platform resources in the Azure portal: Terraform will undo it. Change the code.
 
 ## Status
 
-The Terraform passes `terraform validate` in GitHub Actions but **has not been applied to Azure yet**. Run the plan first and expect to fix small things on the first real deployment. `policies/assign-policies.sh` skips and reports any policy name it can't find.
+All three Terraform stacks pass `terraform validate` in GitHub Actions, but **nothing has been applied to Azure yet**. Run the plans first and expect to fix small things on the first real deployment. `bootstrap/assign-policies.sh` skips and reports any policy name it can't find.

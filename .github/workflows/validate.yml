@@ -1,6 +1,7 @@
 # Checks every change before it can be deployed. Needs no Azure login.
-#   1. Terraform files are formatted, and both stacks pass terraform validate
-#   2. Shell scripts pass shellcheck
+#   1. Terraform files are formatted and all three stacks pass terraform validate
+#   2. Team files in requests/teams are valid YAML
+#   3. Shell scripts pass shellcheck
 name: Validate
 
 on:
@@ -16,6 +17,10 @@ jobs:
   terraform:
     name: Terraform fmt and validate
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        stack: [platform, requests/azure, requests/fabric]
     steps:
       - uses: actions/checkout@v4
 
@@ -24,17 +29,26 @@ jobs:
           terraform_version: "1.9.8"
 
       - name: Format check
-        run: terraform fmt -check -recursive -diff infra
+        run: terraform fmt -check -recursive -diff
 
-      - name: Validate Azure stack
+      - name: Validate ${{ matrix.stack }}
         run: |
-          terraform -chdir=infra/azure init -backend=false -input=false
-          terraform -chdir=infra/azure validate
+          terraform -chdir=${{ matrix.stack }} init -backend=false -input=false
+          terraform -chdir=${{ matrix.stack }} validate
 
-      - name: Validate Fabric stack
+  team-files:
+    name: Team files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check YAML
         run: |
-          terraform -chdir=infra/fabric init -backend=false -input=false
-          terraform -chdir=infra/fabric validate
+          set -euo pipefail
+          for f in requests/teams/*.yaml; do
+            echo "Checking $f"
+            yq e '.' "$f" > /dev/null
+            [[ "$(yq e '.groups | type' "$f")" == "!!map" ]] || { echo "$f: groups must be a map"; exit 1; }
+          done
 
   scripts:
     name: Shellcheck
@@ -42,4 +56,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Shellcheck scripts
-        run: shellcheck -x scripts/*.sh policies/*.sh
+        run: shellcheck -x bootstrap/*.sh scripts/*.sh

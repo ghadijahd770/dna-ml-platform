@@ -3,7 +3,7 @@
 Who gets what in the DNA ML sandbox. Access is always given to **Entra groups**, never to individual people.
 Terraform creates every role assignment below automatically, including the Fabric workspace roles. Only the Fabric "Read all data" permission on a lakehouse in another workspace is set by hand.
 
-Azure roles are assigned in [`infra/azure/roles.tf`](../infra/azure/roles.tf) by role **name**, so Terraform stops with a clear error if Microsoft renames one. Fabric workspace roles are assigned in [`infra/fabric/main.tf`](../infra/fabric/main.tf).
+Team roles are assigned in [`requests/modules/team-azure/roles.tf`](../requests/modules/team-azure/roles.tf) and platform roles in [`platform/roles.tf`](../platform/roles.tf), by role **name**, so Terraform stops with a clear error if Microsoft renames one. Fabric workspace roles are assigned in [`requests/fabric/main.tf`](../requests/fabric/main.tf). Group object IDs live in each team file, `requests/teams/<team>.yaml`.
 
 ## By group
 
@@ -20,7 +20,7 @@ Azure roles are assigned in [`infra/azure/roles.tf`](../infra/azure/roles.tf) by
 
 Data scientists, ML engineers and viewers also get **Reader** on `rg-dna-ml-sbx-san-01`, and the Foundry users get **Reader** on `rg-dna-ai-sbx-san-01`, so they can see resources in the Azure portal without changing anything.
 
-The CI/CD identity also gets **Contributor** and **Role Based Access Control Administrator** on the subscription (`grant_ci_subscription_access = true`) so the deploy workflow can create resource groups and role assignments. Agree this with security. It also gets access to the Terraform state storage. Set `grant_ci_subscription_access = false` to keep all deployments manual.
+The CI/CD identity also gets **Contributor** and **Role Based Access Control Administrator** on the subscription (`grant_ci_subscription_access = true` in `platform/sandbox.tfvars`) so the deploy workflow can create resource groups and role assignments. Agree this with security. It also gets access to the Terraform state storage. Set `grant_ci_subscription_access = false` to keep all deployments manual.
 
 ## Why the storage roles matter
 
@@ -43,7 +43,7 @@ The sandbox is Entra-only. Azure ML studio opens files and notebooks with the pe
 
 ## How the services reach each other
 
-- **Azure ML reads Fabric data:** `infra/fabric` gives the Azure ML workspace identity Contributor on the Fabric workspace.
+- **Azure ML reads Fabric data:** `requests/fabric` gives the Azure ML workspace identity Contributor on the Fabric workspace.
 - **Azure ML reaches its own storage, Key Vault and registry** through its managed identity. Azure sets this up when the workspace is created.
 - **An app calls a Foundry model** using its managed identity with *Cognitive Services OpenAI User*. No API keys.
 - **An endpoint pulls its container** from the registry with *AcrPull*.

@@ -304,7 +304,7 @@ Exact policy names shift a little over time. Search for the key words if the ful
 
 **Expensive GPUs:** Azure ML compute isn't covered by the normal "allowed VM sizes" policy. The real control is **quota**: keep GPU quota at zero in the sandbox until someone has an approved need, then request only what they need. Without quota, nobody can start a GPU.
 
-Ready-made: `policies/assign-policies.sh` in the `dna-ml-platform` repo assigns all of these in one go.
+Ready-made: `bootstrap/assign-policies.sh` in the `dna-ml-platform` repo assigns all of these in one go.
 
 Example: allowed locations, by command. The first line looks up the policy by its display name so you don't need its long ID.
 
@@ -335,7 +335,7 @@ It tags new and changed resources straight away. For resources that already exis
 **Why:** Fabric is already running, but its ML features and permissions need to be locked to the right groups.
 
 1.  **Tenant settings** (Fabric admin portal → Tenant settings): find the machine learning / Data Science settings and the Azure AI or Copilot settings. Enable them *for specific security groups only* (the DNA groups), not the whole organisation.
-2.  **Workspace roles**: ready-made in Terraform. `infra/fabric` in the `dna-ml-platform` repo gives each group its Fabric role from Step 2, and gives Azure ML access to OneLake. Run `scripts/deploy-fabric.sh` as a workspace Admin.
+2.  **Workspace roles**: ready-made in Terraform. `requests/fabric` in the `dna-ml-platform` repo gives each group its Fabric role from Step 2, and gives Azure ML access to OneLake. Put the workspace ID in `requests/teams/dna.yaml` and run `scripts/deploy.sh fabric` as a workspace Admin.
 3.  **Git integration**: Workspace settings → Git integration → connect to your repo. Now every notebook change is saved and traceable.
 4.  **Environments**: create a Fabric Environment with the Python libraries the team uses, so everyone gets the same versions.
 5.  **Sensitivity labels**: with the Purview / compliance team, make sure labels like "Confidential – Health" can be applied to lakehouses and reports.
@@ -350,7 +350,7 @@ It tags new and changed resources straight away. For resources that already exis
 
 **Why:** the template is a recipe file. Run it once and you get a complete, correctly secured ML workspace. Run it again for dev, test and prod and they're identical.
 
-**Ready-made:** the `dna-ml-platform` repo has this template already, written in **Terraform**, in `infra/azure/ml.tf` and `infra/azure/roles.tf`. It does the following:
+**Ready-made:** the `dna-ml-platform` repo has this template already, written in **Terraform**, in `requests/modules/team-azure/ml.tf` and `requests/modules/team-azure/roles.tf`. The team's settings, such as cluster size, live in `requests/teams/dna.yaml`. It does the following:
 
 | In the template                                                        | So that…                                                               |
 |------------------------------------------------------------------------|------------------------------------------------------------------------|
@@ -364,7 +364,7 @@ It tags new and changed resources straight away. For resources that already exis
 
 **What Terraform is:** you describe what you want in `.tf` files. Terraform shows you a **plan** of what it will change, and only after you agree does it **apply** it. It keeps a **state file**, its record of what it built, in a locked-down storage account.
 
-The sandbox network settings are a few lines on the workspace in `infra/azure/ml.tf`:
+The sandbox network settings are a few lines on the workspace in `requests/modules/team-azure/ml.tf`:
 
     resource "azurerm_machine_learning_workspace" "main" {
       # ...name, location, storage, key vault, app insights, registry...
@@ -380,7 +380,7 @@ The sandbox network settings are a few lines on the workspace in `infra/azure/ml
 
 **Storage shared keys:** turning these off also needs the workspace to use identity-based access to its own storage. Check Microsoft's current "disable shared key" docs for Azure ML before switching it off, or the studio may stop showing files.
 
-A role assignment in Terraform uses the role's **name**, so there are no long IDs to look up. Every row of your Step 2 table becomes one entry like this in `infra/azure/roles.tf`:
+A role assignment in Terraform uses the role's **name**, so there are no long IDs to look up. Every row of your Step 2 table becomes one entry like this in `requests/modules/team-azure/roles.tf`:
 
     resource "azurerm_role_assignment" "data_scientists" {
       scope                = azurerm_machine_learning_workspace.main.id
@@ -389,13 +389,14 @@ A role assignment in Terraform uses the role's **name**, so there are no long ID
       principal_type       = "Group"
     }
 
-Get a group's object ID with: `az ad group show --group sg-dna-data-scientists --query id -o tsv`. The script `scripts/get-group-ids.sh` does this for all six.
+Get a group's object ID with: `az ad group show --group sg-dna-data-scientists --query id -o tsv`. The script `bootstrap/get-group-ids.sh` does this for all six and prints them ready to paste into the team file.
 
 Preview, then deploy:
 
-    scripts/bootstrap-state.sh          # once: storage for the Terraform state
-    scripts/deploy-sandbox.sh --plan    # preview only, nothing changes
-    scripts/deploy-sandbox.sh           # preview, then asks before applying
+    bootstrap/bootstrap-state.sh        # once: storage for the Terraform state
+    scripts/deploy.sh platform          # once: the shared foundation
+    scripts/deploy.sh requests --plan   # preview the team's resources, nothing changes
+    scripts/deploy.sh requests          # preview, then asks before applying
 
 **Quota:** GPUs need quota approval, which can take days. Request it now in *Subscriptions → Usage + quotas*, even if nobody needs GPUs yet.
 
@@ -407,7 +408,7 @@ Preview, then deploy:
 
 **Why:** when a GenAI use case appears, you want a safe Foundry project ready in under an hour, with costs capped and only approved models available.
 
-**Ready-made:** `infra/azure/foundry.tf` in the `dna-ml-platform` repo. The Foundry template creates:
+**Ready-made:** `requests/modules/team-azure/foundry.tf` in the `dna-ml-platform` repo. The Foundry template creates:
 
 - A **Foundry resource** (an "AI Services" account) with a **public endpoint** and **key access disabled**, so only Entra logins work. Optionally, add IP rules for the corporate network.
 - One **project** per use case or team. Projects keep work separate.
@@ -422,7 +423,7 @@ Preview, then deploy:
       disableLocalAuth    = true        # no API keys, Entra login only
     }
 
-Approved models are listed in `infra/azure/sandbox.tfvars` under `foundry_model_deployments`. Nothing else can be deployed.
+Approved models are listed in the team file, `requests/teams/dna.yaml`, under `foundry.models`. Nothing else can be deployed. Another project is one more entry under `foundry.projects`.
 
 Later, when apps start calling models, add the **AI gateway** (Azure API Management) in front. It gives one address for all models, limits per team and a log of who used what.
 
@@ -480,17 +481,22 @@ Create these in *Azure Monitor → Alerts → Create → Alert rule*, pick the r
 
 **Why:** this is the "boom, done" page. When DNA asks for something, you look it up and follow the line.
 
-| When DNA asks…                                    | We do…                                                                         | Approval needed              | Time                                             |
-|---------------------------------------------------|--------------------------------------------------------------------------------|------------------------------|--------------------------------------------------|
-| "Add a new person"                                | Add them to the right `sg-dna-*` group (we're group owners)                    | Their manager                | Minutes (or the agreed identity-team turnaround) |
-| "We want to try ML in Fabric"                     | Already enabled in Step 6; point them to the workspace                         | None                         | Minutes                                          |
-| "We want to train a custom model"                 | Run the Azure ML template (Step 7)                                             | Platform lead                | Under an hour                                    |
-| "We need GPUs"                                    | Request GPU quota, then set `deployGpuCluster = true` in the template settings | Platform lead + budget owner | Hours (days if quota is needed)                  |
-| "We want to use GPT"                              | Run the Foundry template (Step 8), deploy approved model                       | Security (data check)        | Under an hour                                    |
-| "We want a model that isn't on the approved list" | Security review of the model, then add to approved list                        | Security                     | Days                                             |
-| "An app needs the model live"                     | Azure ML online endpoint (containers handled for us)                           | Platform lead                | Hours                                            |
-| "We have our own Docker app"                      | Container Apps template + CI/CD to ACR                                         | Platform lead + security     | About a day                                      |
-| "Put it in production"                            | Follow the promotion checklist (Step 12)                                       | Change board / owner         | Agreed process                                   |
+**Ready-made:** in the `dna-ml-platform` repo, **each team is one file**, `requests/teams/dna.yaml`. Most requests are a one-line change to that file, then a pull request and the **Deploy** workflow (plan first, then apply). The DNA team asks through **request forms** in GitHub (*Issues → New issue*). The full menu is in `docs/request-menu.md`.
+
+| When DNA asks…                             | We do…                                                                                                     | Approval needed               | Time                         |
+|--------------------------------------------|------------------------------------------------------------------------------------------------------------|-------------------------------|------------------------------|
+| "Add a new person"                         | Add them to the right `sg-dna-*` group (we're group owners). Azure and Fabric access follow automatically. | Their manager                 | Minutes                      |
+| "We need more CPU nodes"                   | Change `azure_ml.cpu_cluster.max_nodes` in the team file                                                   | Platform lead                 | Under an hour                |
+| "We need GPUs"                             | Request GPU quota, then set `azure_ml.gpu_cluster.enabled: true`                                           | Platform lead + budget owner  | Hours (days for quota)       |
+| "We want to use GPT"                       | Add the approved model under `foundry.models`                                                              | Security (data and residency) | Under an hour after sign-off |
+| "We need another Foundry project"          | Add an entry under `foundry.projects`                                                                      | Platform lead                 | Under an hour                |
+| "Our sandbox is about to expire"           | Change `expires`                                                                                           | Platform lead                 | Minutes                      |
+| "A new team wants to join"                 | Copy `dna.yaml` to a new team file and fill it in                                                          | Platform lead + budget owner  | Hours (waiting on groups)    |
+| "We want a model that isn't approved"      | Security review first, then it's a `foundry.models` change                                                 | Security                      | Days                         |
+| "An app needs the model live"              | Azure ML online endpoint (not templated yet)                                                               | Platform lead                 | Hours                        |
+| "We have our own Docker app"               | Container Apps (not templated yet) + CI/CD to the registry                                                 | Platform lead + security      | About a day                  |
+| "We want real patient data in the sandbox" | **No.** Real data needs private networking: plan dev/prod instead                                          | Security                      | Project                      |
+| "Put it in production"                     | Follow the promotion checklist (Step 12)                                                                   | Change board / owner          | Agreed process               |
 
 Publish this table where the DNA team can see it, for example the team wiki or SharePoint. It also tells them what to expect.
 
