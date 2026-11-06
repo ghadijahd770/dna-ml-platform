@@ -28,7 +28,7 @@ Not every policy supports Deny. The portal shows the allowed effects for each on
 ## Things to know
 
 - These assignments cover the **whole subscription**. If other teams share it, agree with the subscription owner first.
-- The storage shared-key policy will report the Azure ML storage account as non-compliant until `disableStorageSharedKey` is turned on (see [network decision](../docs/network-decision.md)).
+- The storage shared-key policy will report the Azure ML storage account as non-compliant until `disable_storage_shared_key` is turned on (see [network decision](../docs/network-decision.md)).
 - "Inherit a tag" only tags new or changed resources. For existing ones, create a **remediation task** in Policy → Remediation.
 - Azure ML compute isn't covered by the "allowed VM sizes" policy. GPU cost is controlled by **quota**: the sandbox has none until approved.
 - Policy display names change occasionally. The script skips any it can't find and says so. Search the portal for a similar name.

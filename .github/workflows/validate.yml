@@ -1,7 +1,6 @@
 # Checks every change before it can be deployed. Needs no Azure login.
-#   1. Bicep templates compile and pass the linter
-#   2. The sandbox parameter file compiles against the template
-#   3. Shell scripts pass shellcheck
+#   1. Terraform files are formatted, and both stacks pass terraform validate
+#   2. Shell scripts pass shellcheck
 name: Validate
 
 on:
@@ -14,29 +13,28 @@ permissions:
   contents: read
 
 jobs:
-  bicep:
-    name: Bicep build and lint
+  terraform:
+    name: Terraform fmt and validate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Bicep
-        run: az bicep install && az bicep version
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
 
-      - name: Build templates
+      - name: Format check
+        run: terraform fmt -check -recursive -diff infra
+
+      - name: Validate Azure stack
         run: |
-          set -euo pipefail
-          az bicep build --file infra/main.bicep --stdout > /dev/null
-          for f in infra/modules/*.bicep; do
-            echo "Building $f"
-            az bicep build --file "$f" --stdout > /dev/null
-          done
+          terraform -chdir=infra/azure init -backend=false -input=false
+          terraform -chdir=infra/azure validate
 
-      - name: Build sandbox parameters
-        run: az bicep build-params --file infra/sandbox.bicepparam --stdout > /dev/null
-
-      - name: Lint
-        run: az bicep lint --file infra/main.bicep
+      - name: Validate Fabric stack
+        run: |
+          terraform -chdir=infra/fabric init -backend=false -input=false
+          terraform -chdir=infra/fabric validate
 
   scripts:
     name: Shellcheck
