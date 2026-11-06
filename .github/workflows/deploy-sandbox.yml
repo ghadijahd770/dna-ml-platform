@@ -1,0 +1,70 @@
+# Deploys the DNA ML sandbox from GitHub, using the CI/CD managed identity (OIDC, no secrets).
+#
+# Before the first run (see docs/deployment-runbook.md):
+#   1. Deploy once from your machine with scripts/deploy-sandbox.sh (creates the CI/CD identity).
+#   2. Create a GitHub environment called "sandbox" (Settings > Environments) and add yourself
+#      as a required reviewer, so every deployment needs a click from you.
+#   3. Add these repository variables (Settings > Secrets and variables > Actions > Variables):
+#        AZURE_CLIENT_ID          ciClientId output of the first deployment
+#        AZURE_TENANT_ID          your Entra tenant ID
+#        AZURE_SUBSCRIPTION_ID    the sandbox subscription ID
+#        DNA_ALERT_EMAIL          address that receives alerts
+#        DNA_GROUP_PLATFORM_ADMINS, DNA_GROUP_DATA_ENGINEERS, DNA_GROUP_DATA_SCIENTISTS,
+#        DNA_GROUP_ML_ENGINEERS, DNA_GROUP_GENAI_DEVELOPERS, DNA_GROUP_VIEWERS   group object IDs
+name: Deploy sandbox
+
+on:
+  workflow_dispatch:
+    inputs:
+      what_if_only:
+        description: "Preview only (what-if). Untick to deploy."
+        type: boolean
+        default: true
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-sandbox
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: ${{ inputs.what_if_only && 'Preview' || 'Deploy' }} sandbox
+    runs-on: ubuntu-latest
+    environment: sandbox
+    env:
+      DNA_LOCATION: southafricanorth
+      DNA_ALERT_EMAIL: ${{ vars.DNA_ALERT_EMAIL }}
+      DNA_GROUP_PLATFORM_ADMINS: ${{ vars.DNA_GROUP_PLATFORM_ADMINS }}
+      DNA_GROUP_DATA_ENGINEERS: ${{ vars.DNA_GROUP_DATA_ENGINEERS }}
+      DNA_GROUP_DATA_SCIENTISTS: ${{ vars.DNA_GROUP_DATA_SCIENTISTS }}
+      DNA_GROUP_ML_ENGINEERS: ${{ vars.DNA_GROUP_ML_ENGINEERS }}
+      DNA_GROUP_GENAI_DEVELOPERS: ${{ vars.DNA_GROUP_GENAI_DEVELOPERS }}
+      DNA_GROUP_VIEWERS: ${{ vars.DNA_GROUP_VIEWERS }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Preview changes (what-if)
+        run: |
+          az deployment sub what-if \
+            --name "dna-sandbox-${{ github.run_number }}" \
+            --location "$DNA_LOCATION" \
+            --parameters infra/sandbox.bicepparam
+
+      - name: Deploy
+        if: ${{ !inputs.what_if_only }}
+        run: |
+          az deployment sub create \
+            --name "dna-sandbox-${{ github.run_number }}" \
+            --location "$DNA_LOCATION" \
+            --parameters infra/sandbox.bicepparam \
+            --query properties.outputs -o json

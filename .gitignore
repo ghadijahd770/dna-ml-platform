@@ -1,0 +1,15 @@
+# Compiled Bicep output
+infra/**/*.json
+!infra/**/bicepconfig.json
+
+# Local environment files and secrets
+.env
+*.local
+*.secret
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+~$*.docx
